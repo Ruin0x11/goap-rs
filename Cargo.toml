@@ -1,0 +1,12 @@
+[package]
+name = "goap"
+version = "0.1.0"
+authors = ["ruin <ipickering2@gmail.com>"]
+
+[dependencies]
+rand = "0.3.15"
+toml = "0.3.2"
+serde = "0.9.11"
+serde_derive = "0.9.11"
+enum_derive = "0.1.7"
+macro-attr = "0.2.0"
