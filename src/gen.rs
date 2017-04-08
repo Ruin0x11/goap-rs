@@ -3,7 +3,6 @@ mod tests {
     use ::*;
     use std::collections::BTreeMap;
     use std::fmt::{self, Display};
-    use test::Bencher;
     use rand::{self, ThreadRng, Rng};
 
     type PropMap = BTreeMap<String, bool>;
@@ -88,7 +87,7 @@ mod tests {
                 })
             };
             let actions = self.actions.iter()
-                .filter(|&(_, action_effects)| satisfies_conditions(action_effects))
+                .filter(|&(_, actions)| satisfies_conditions(actions))
                 .map(|(action, _)| action)
                 .cloned().collect::<Vec<String>>();
 

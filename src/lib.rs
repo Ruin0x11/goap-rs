@@ -26,177 +26,185 @@
 // along the parents of each node in the path, instead of whatever was passed in
 // as the set of goal conditions.
 
-#![feature(test)]
-#![feature(associated_consts)]
+mod astar;
 
-mod gen;
-
-extern crate rand;
-extern crate test;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
-extern crate toml;
 #[macro_use] extern crate enum_derive;
 #[macro_use] extern crate macro_attr;
 
+#[cfg(test)]
+extern crate rand;
+#[cfg(test)]
+extern crate toml;
+
 use std::f32;
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 
-#[derive(PartialEq)]
-struct AStarState<P> {
-    cost: f32,
-    position: P,
-}
+use astar::AStar;
 
-impl<P> Eq for AStarState<P>
-    where P: PartialEq {}
+type PropMap<K, V> = BTreeMap<K, V>;
 
-impl<P> Ord for AStarState<P>
-    where P: PartialEq
-{
-    fn cmp(&self, other: &Self) -> Ordering {
-        assert!(self.cost.is_finite());
-        assert!(other.cost.is_finite());
-        if other.cost > self.cost {
-            Ordering::Greater
-        } else if other.cost < self.cost {
-            Ordering::Less
-        } else if other.cost == self.cost {
-            Ordering::Equal
-        } else {
-            unreachable!()
-        }
-    }
-}
-
-impl<P> PartialOrd for AStarState<P>
-    where P: PartialEq
-{
-    fn partial_cmp(&self, other: &AStarState<P>) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// A generic A* trait that accounts for both states and transitions between
-/// them.
-pub trait AStar<A, S>
-    where S: Hash + Eq + PartialEq + Clone + Debug,
-          A: PartialEq + Clone + Debug {
-
-    const CALCULATION_LIMIT: u32 = 200;
-
-    /// The heuristic function used by A*.
-    fn heuristic(&self, next_state: &S, goal: &S) -> f32;
-
-    /// The cost from transitioning from a given state using an action.
-    fn movement_cost(&self, current_state: &S, action: &A) -> f32;
-
-    /// The set of neighboring states and the transitions to each.
-    fn neighbors(&self, current_state: &S) -> Vec<(A, S)>;
-
-    fn goal_reached(&self, current_state: &S, goal: &S) -> bool;
-    fn goal_is_reachable(&self, goal: &S) -> bool;
-
-    /// Finds an optimal sequence of transitions, if any, from the start state
-    /// to the destination state.
-    fn find(&self, from: S, to: &S) -> Vec<A> {
-        if from == *to {
-            return vec![];
-        }
-
-        if !self.goal_is_reachable(&to) {
-            return vec![];
-        }
-
-        let mut frontier = BinaryHeap::new();
-        frontier.push(AStarState { position: from.clone(), cost: 0.0 });
-        let mut came_from = HashMap::new();
-        let mut cost_so_far = HashMap::new();
-
-        came_from.insert(from.clone(), None);
-        cost_so_far.insert(from.clone(), 0.0);
-
-        let mut calculation_steps = 0;
-        let mut final_state = None;
-
-        while let Some(current) = frontier.pop() {
-            if self.goal_reached(&current.position, &to) {
-                final_state = Some(current.position);
-                break;
-            }
-            // Waiting for associated_consts to be stabilized...
-            if calculation_steps >= Self::CALCULATION_LIMIT {
-                break
-            } else {
-                calculation_steps += 1;
-            }
-            let neigh = self.neighbors(&current.position);
-
-            for (action, next_state) in neigh.into_iter() {
-                let new_cost = cost_so_far[&current.position] + self.movement_cost(&current.position, &action);
-                let val = cost_so_far.entry(next_state.clone()).or_insert(f32::MAX);
-                if new_cost < *val {
-                    *val = new_cost;
-                    let priority = new_cost + self.heuristic(&next_state, &to);
-                    frontier.push(AStarState { position: next_state.clone(), cost: priority });
-                    came_from.insert(next_state.clone(), Some((action, current.position.clone())));
-                }
-            }
-        }
-
-        // The user might pass in a state with only the properties cared about
-        // when checking if the goal is reached. But the data structures work
-        // with complete snapshots of states with all variables accounted for.
-        // So, we have to use pull out the complete state that was found during
-        // the exploration (if any) and use that as the start node for making
-        // the returned path.
-        match final_state {
-            Some(dest) => self.create_result(from, &dest, came_from),
-            None       => vec![]
-        }
-    }
-
-    fn create_result(&self, start: S, goal: &S, came_from: HashMap<S, Option<(A, S)>>) -> Vec<A> {
-        let mut current = goal.clone();
-        let mut path_buffer = vec![];
-        let mut state_history = vec![];
-        while current != start {
-            match came_from.get(&current) {
-                Some(&Some((ref action, ref new_current))) => {
-                    current = new_current.clone();
-                    path_buffer.push(action.clone());
-                    if current != start {
-                        state_history.push(new_current.clone());
-                    }
-                }
-                Some(&None) => panic!(
-                    "Reached a dead-end before reaching the start node when tracing backwards from the goal to the start."),
-                None => {
-                    path_buffer = vec![];
-                    break
-                },
-            }
-        }
-
-        assert_eq!(None, state_history.iter().find(|p| **p == start),
-                   "The path that was found looped back on itself! {:?}", state_history);
-
-        path_buffer.reverse();
-        path_buffer
-    }
+pub trait Effect {
+    fn cost(&self) -> u32;
 }
 
 /// A trait for objects that can search over the space of possible states and
 /// generate an optimal plan for transitioning between start and goal states.
-pub trait Planner {
-    type Action;
-    type State;
+pub trait Planner<K, V, A, S, E>
+    where E: Effect {
+    fn get_plan(&self, state: S) -> Vec<A>;
+    fn set_goal(&mut self, goal: S);
 
-    fn get_plan(&self, state: Self::State) -> Vec<Self::Action>;
-    fn set_goal(&mut self, goal: Self::State);
+    fn get_actions(&self) -> Vec<&A>;
+    fn actions(&self, action: &A) -> &E;
+    fn is_neighbor(&self, current: &S, action: &A) -> bool;
+    fn closeness_to(&self, current: &S, to: &S) -> u32;
+    fn transition(&self, current: &S, next: &A) -> S;
+    fn plan_found(&self, current: &S, goal: &S) -> bool;
+}
+
+impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
+    where K: Ord + PartialOrd + Hash + Eq + PartialEq + Clone + Debug,
+          V: Hash + Eq + PartialEq + Clone + Debug,
+          A: Hash + Eq + PartialEq + Clone + Debug {
+    fn heuristic(&self, next: &GoapState<K, V>, destination: &GoapState<K, V>) -> f32 {
+        self.closeness_to(&next, &destination) as f32
+    }
+
+    fn movement_cost(&self, _current: &GoapState<K, V>, action: &A) -> f32 {
+        let current_eff = self.actions(&action);
+        current_eff.cost() as f32
+    }
+
+    fn neighbors(&self, current: &GoapState<K, V>) -> Vec<(A, GoapState<K, V>)> {
+        let valid_actions = self.get_actions().iter()
+            .filter(|&action| self.is_neighbor(current, action))
+            .map(|&a| a )
+            .cloned().collect::<Vec<A>>();
+
+        let states = valid_actions.iter().cloned()
+            .map(|action| self.transition(&current, &action))
+            .collect::<Vec<GoapState<K, V>>>();
+
+        valid_actions.into_iter().zip(states.into_iter()).collect()
+    }
+
+    fn goal_reached(&self, from: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
+        self.plan_found(from, to)
+    }
+
+    fn goal_is_reachable(&self, _to: &GoapState<K, V>) -> bool {
+        true
+    }
+}
+
+#[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub struct GoapState<K, V> {
+    props: PropMap<K, V>,
+}
+
+#[derive(Debug)]
+pub struct GoapEffects<K, V> {
+    preconditions: PropMap<K, V>,
+    postconditions: PropMap<K, V>,
+    cost: u32,
+}
+
+impl<K: Ord + PartialOrd, V> GoapEffects<K, V> {
+    pub fn new(cost: u32) -> Self {
+        GoapEffects {
+            preconditions: PropMap::new(),
+            postconditions: PropMap::new(),
+            cost: cost,
+        }
+    }
+
+    pub fn set_precondition(&mut self, key: K, val: V) {
+        self.preconditions.insert(key, val);
+    }
+
+    pub fn set_effect(&mut self, key: K, val: V) {
+        self.postconditions.insert(key, val);
+    }
+}
+
+
+impl<K, V> Effect for GoapEffects<K, V> {
+    fn cost(&self) -> u32 {
+        self.cost
+    }
+}
+
+pub struct GoapPlanner<K, V, A> {
+    goal: Option<GoapState<K, V>>,
+    actions: HashMap<A, GoapEffects<K, V>>,
+}
+
+impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
+    GoapPlanner<K, V, A>
+    where K: Ord + PartialOrd + Hash + Eq + PartialEq + Clone + Debug,
+          V: Hash + Eq + PartialEq + Clone + Debug,
+          A: Hash + Eq + PartialEq + Clone + Debug {
+    fn get_plan(&self, state: GoapState<K, V>) -> Vec<A> {
+        if let Some(ref goal) = self.goal {
+            self.find(state, &goal)
+        } else {
+            vec![]
+        }
+    }
+
+    fn set_goal(&mut self, goal: GoapState<K, V>) {
+        self.goal = Some(goal);
+    }
+
+    fn get_actions(&self) -> Vec<&A> {
+        self.actions.keys().collect()
+    }
+
+    fn actions(&self, action: &A) -> &GoapEffects<K, V> {
+        self.actions.get(action).unwrap()
+    }
+
+    fn closeness_to(&self, current: &GoapState<K, V>, goal: &GoapState<K, V>) -> u32 {
+        assert!(goal.props.len() <= current.props.len(), "The goal state specifies more conditions than were given in the starting state!");
+        let mut differences = 0;
+        for key in goal.props.keys() {
+            if goal.props.get(key).unwrap() != current.props.get(key).unwrap() {
+                differences += 1;
+            }
+        }
+        differences
+    }
+
+    fn transition(&self, current: &GoapState<K, V>, next: &A) -> GoapState<K, V> {
+        let effects = self.actions.get(next).unwrap();
+        let mut new_state = current.clone();
+        for key in effects.postconditions.keys() {
+            let effect_val = effects.postconditions.get(key).unwrap().clone();
+            if !new_state.props.contains_key(key) {
+                new_state.props.insert(key.clone(), effect_val);
+            } else {
+                let val_mut = new_state.props.get_mut(key).unwrap();
+                *val_mut = effect_val;
+            }
+        }
+        new_state
+    }
+
+    fn is_neighbor(&self, current: &GoapState<K, V>, action: &A) -> bool {
+        let effects = self.actions.get(action).unwrap();
+        effects.preconditions.iter().all(|(cond, val)| {
+            current.props.get(cond).map_or(false, |r| r == val)
+        })
+    }
+
+    fn plan_found(&self, current: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
+        to.props.iter().all(|(cond, val)| current.props.get(cond).map_or(false, |r| r == val))
+    }
+
 }
 
 #[cfg(test)]
@@ -205,97 +213,9 @@ mod tests {
 
     use super::*;
     use std::collections::{BTreeMap, HashMap};
-    use std::fmt::{self, Display};
     use self::MyKey::*;
     use self::MyAction::*;
-
-    type PropMap = BTreeMap<MyKey, bool>;
-
-    fn get_state_differences(current: &PropMap, goal: &PropMap) -> u32 {
-        assert!(goal.len() <= current.len(), "The goal state specifies more conditions than were given in the starting state!");
-        let mut differences = 0;
-        for key in goal.keys() {
-            if goal.get(key).unwrap() != current.get(key).unwrap() {
-                differences += 1;
-            }
-        }
-        differences
-    }
-
-    fn transition(current: &MyState, next: &Effects) -> MyState {
-        let mut new_state = current.clone();
-        for key in next.effects.keys() {
-            let val_mut = new_state.props.get_mut(key).unwrap();
-            *val_mut = *next.effects.get(key).unwrap();
-        }
-        new_state
-    }
-
-    #[derive(Debug)]
-    struct Effects {
-        preconditions: PropMap,
-        effects: PropMap,
-        cost: u32,
-    }
-
-    impl Effects {
-        pub fn new(cost: u32) -> Self {
-            Effects {
-                preconditions: PropMap::new(),
-                effects: PropMap::new(),
-                cost: cost,
-            }
-        }
-
-        pub fn set_precondition(&mut self, key: MyKey, val: bool) {
-            self.preconditions.insert(key, val);
-        }
-
-        pub fn set_effect(&mut self, key: MyKey, val: bool) {
-            self.effects.insert(key, val);
-        }
-    }
-
-    struct MyFinder {
-        actions: HashMap<MyAction, Effects>,
-    }
-
-    impl AStar<MyAction, MyState> for MyFinder {
-        fn heuristic(&self, next: &MyState, destination: &MyState) -> f32 {
-            get_state_differences(&next.props, &destination.props) as f32
-        }
-
-        fn movement_cost(&self, _current: &MyState, action: &MyAction) -> f32 {
-            let current_eff = self.actions.get(&action).unwrap();
-            current_eff.cost as f32
-        }
-
-        fn neighbors(&self, current: &MyState) -> Vec<(MyAction, MyState)> {
-            let satisfies_conditions = |effect: &Effects| {
-                effect.preconditions.iter().all(|(cond, val)| {
-                    current.props.get(cond).unwrap() == val
-                })
-            };
-            let actions = self.actions.iter()
-                .filter(|&(_, action_effects)| satisfies_conditions(action_effects))
-                .map(|(action, _)| action)
-                .cloned().collect::<Vec<MyAction>>();
-
-            let states = actions.iter().cloned()
-                .map(|action| transition(&current, self.actions.get(&action).unwrap()))
-                .collect::<Vec<MyState>>();
-
-            actions.into_iter().zip(states.into_iter()).collect()
-        }
-
-        fn goal_reached(&self, current: &MyState, to: &MyState) -> bool {
-            to.props.iter().all(|(cond, val)| current.props.get(cond).unwrap() == val)
-        }
-
-        fn goal_is_reachable(&self, _to: &MyState) -> bool {
-            true
-        }
-    }
+    use rand::{self, ThreadRng, Rng};
 
     macro_attr! {
         #[derive(Clone, Hash, Debug, Eq, PartialEq, Ord, PartialOrd, EnumFromStr!)]
@@ -306,20 +226,6 @@ mod tests {
             HasMoney,
             InShop,
             InForest,
-        }
-    }
-
-    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-    struct MyState {
-        props: PropMap,
-    }
-
-    impl Display for MyState {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            for (k, v) in self.props.iter() {
-                write!(f, "{:?} -> {}\n", k, v)?;
-            }
-            Ok(())
         }
     }
 
@@ -337,73 +243,44 @@ mod tests {
         }
     }
 
-    struct MyPlanner {
-        goal: Option<MyState>,
-        finder: MyFinder,
-    }
+    fn planner_from_toml() -> GoapPlanner<MyKey, bool, MyAction> {
+        let mut actions = HashMap::new();
+        let value = toml_util::toml_value_from_file("./data/actions.toml");
+        if let toml::Value::Array(ref array) = value["action"] {
+            for action in array.iter() {
+                // Parse string as enum
+                let name = action["name"].clone().try_into::<String>().unwrap()
+                    .parse::<MyAction>().unwrap();
+                let cost = action["cost"].clone().try_into::<u32>().unwrap();
+                let mut effects = GoapEffects::new(cost);
 
-    impl MyPlanner {
-        pub fn new() -> Self {
-            let mut actions = HashMap::new();
-            let value = toml_util::toml_value_from_file("./data/actions.toml");
-            if let toml::Value::Array(ref array) = value["action"] {
-                for action in array.iter() {
-                    // Parse string as enum
-                    let name = action["name"].clone().try_into::<String>().unwrap()
-                        .parse::<MyAction>().unwrap();
-                    let cost = action["cost"].clone().try_into::<u32>().unwrap();
-                    let mut effects = Effects::new(cost);
-
-                    // Read preconditions
-                    if let toml::Value::Table(ref pre_table) = action["pre"] {
-                        for (pre_name, pre_value) in pre_table.iter() {
-                            let key = pre_name.parse::<MyKey>().unwrap();
-                            let value = pre_value.clone().try_into::<bool>().unwrap();
-                            effects.set_precondition(key, value);
-                        }
+                // Read preconditions
+                if let toml::Value::Table(ref pre_table) = action["pre"] {
+                    for (pre_name, pre_value) in pre_table.iter() {
+                        let key = pre_name.parse::<MyKey>().unwrap();
+                        let value = pre_value.clone().try_into::<bool>().unwrap();
+                        effects.set_precondition(key, value);
                     }
-
-                    // Read postconditions
-                    if let toml::Value::Table(ref post_table) = action["post"] {
-                        for (post_name, post_value) in post_table.iter() {
-                            let key = post_name.parse::<MyKey>().unwrap();
-                            let value = post_value.clone().try_into::<bool>().unwrap();
-                            effects.set_effect(key, value);
-                        }
-                    }
-
-                    actions.insert(name, effects);
                 }
-            }
 
-            MyPlanner {
-                goal: None,
-                finder: MyFinder {
-                    actions: actions,
-                },
+                // Read postconditions
+                if let toml::Value::Table(ref post_table) = action["post"] {
+                    for (post_name, post_value) in post_table.iter() {
+                        let key = post_name.parse::<MyKey>().unwrap();
+                        let value = post_value.clone().try_into::<bool>().unwrap();
+                        effects.set_effect(key, value);
+                    }
+                }
+
+                actions.insert(name, effects);
             }
+        }
+
+        GoapPlanner {
+            goal: None,
+            actions: actions,
         }
     }
-
-    impl Planner for MyPlanner {
-        type Action = MyAction;
-        type State = MyState;
-
-        fn get_plan(&self, state: MyState) -> Vec<MyAction> {
-            if let Some(ref goal) = self.goal {
-                self.finder.find(state, &goal)
-            } else {
-                vec![]
-            }
-        }
-
-        fn set_goal(&mut self, goal: MyState) {
-            self.goal = Some(goal);
-        }
-    }
-
-    use test::Bencher;
-    use rand::{self, Rng};
 
     #[test]
     fn test_get_plan() {
@@ -411,7 +288,7 @@ mod tests {
 
         // Firewood on the ground can only be produced by cutting down a tree.
         goal_c.insert(FirewoodOnGround, true);
-        let goal = MyState { props: goal_c };
+        let goal = GoapState { props: goal_c };
 
         // All properties of the starting world must be specified, for now.
         let mut start_c =  BTreeMap::new();
@@ -422,42 +299,82 @@ mod tests {
         start_c.insert(InShop, false);
         start_c.insert(InForest, true);
 
-        let start = MyState { props: start_c };
+        let start = GoapState { props: start_c };
 
-        let mut planner = MyPlanner::new();
+        let mut planner = planner_from_toml();
         planner.set_goal(goal);
 
         let plan = planner.get_plan(start);
         assert_eq!(plan, [GatherBranches, GoToShop, SellFirewood, BuyAxe, GoToForest, ChopTree]);
     }
 
-    #[bench]
-    fn bench_get_plan(b: &mut Bencher) {
+    fn get_random_planner() -> GoapPlanner<String, bool, String> {
+        let mut actions = HashMap::new();
         let mut rng = rand::thread_rng();
+        let rand_str = || rand::thread_rng().gen_ascii_chars().take(20).collect::<String>();
 
+        let mut keys = Vec::new();
+
+        for _ in 0..10 {
+            keys.push(rand_str());
+        }
+
+        for _ in 0..100 {
+            let action_name = rand_str();
+            let cost = rng.gen_range(1, 10);
+            let mut effects = GoapEffects::new(cost);
+
+            // Preconditions
+            for _ in 0..rng.gen_range(1, 5) {
+                let key = rng.choose(&keys).unwrap();
+                let val = rng.gen();
+                effects.set_precondition(key.clone(), val);
+            }
+
+            // Postconditions
+            for _ in 0..rng.gen_range(1, 20) {
+                let key = rng.choose(&keys).unwrap();
+                let val = rng.gen();
+                effects.set_effect(key.clone(), val);
+            }
+            actions.insert(action_name, effects);
+        }
+        GoapPlanner {
+            goal: None,
+            actions: actions,
+        }
+    }
+
+    fn gen_state(rng: &mut ThreadRng, planner: &GoapPlanner<String, bool, String>) -> GoapState<String, bool> {
+        let mut state_conds = BTreeMap::new();
+        for key in planner.actions.keys() {
+            state_conds.insert(key.clone(), rng.gen());
+        }
+        GoapState { props: state_conds }
+    }
+
+    #[cfg(never)]
+    #[test]
+    fn test_generated() {
+        let mut planner = get_random_planner();
+        let mut rng = rand::thread_rng();
+        for _ in 0..100 {
+            let goal = gen_state(&mut rng, &planner);
+            let start = gen_state(&mut rng, &planner);
+            planner.set_goal(goal);
+            let plan = planner.get_plan(start);
+            println!("Plan: {:?}", plan);
+        }
+    }
+
+    #[cfg(never)]
+    #[bench]
+    fn benchmark_generated(b: &mut Bencher) {
         let mut planner = MyPlanner::new();
-
+        let mut rng = rand::thread_rng();
         b.iter(|| {
-            let mut goal_c = BTreeMap::new();
-            goal_c.insert(HasMoney, rng.gen());
-            goal_c.insert(HasAxe, rng.gen());
-            goal_c.insert(FirewoodOnGround, rng.gen());
-            goal_c.insert(HasFirewood, rng.gen());
-            goal_c.insert(InShop, true);
-            goal_c.insert(InForest, false);
-            let goal = MyState { props: goal_c };
-
-            let mut start_c =  BTreeMap::new();
-            start_c.insert(HasAxe, rng.gen());
-            start_c.insert(FirewoodOnGround, rng.gen());
-            start_c.insert(HasFirewood, rng.gen());
-            start_c.insert(HasMoney, rng.gen());
-            start_c.insert(InShop, true);
-            start_c.insert(InForest, false);
-            let start = MyState { props: start_c };
-
-            // println!("===Start===\n{}===Goal====\n{}", start, goal);
-
+            let goal = gen_state(&mut rng, &planner);
+            let start = gen_state(&mut rng, &planner);
             planner.set_goal(goal);
             let plan = planner.get_plan(start);
             // println!("Plan: {:?}", plan);
