@@ -28,11 +28,14 @@
 
 mod astar;
 
+#[cfg(test)]
 extern crate serde;
+#[cfg(test)]
 #[macro_use] extern crate serde_derive;
+#[cfg(test)]
 #[macro_use] extern crate enum_derive;
+#[cfg(test)]
 #[macro_use] extern crate macro_attr;
-
 #[cfg(test)]
 extern crate rand;
 #[cfg(test)]
