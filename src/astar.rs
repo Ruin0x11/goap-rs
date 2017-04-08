@@ -106,12 +106,12 @@ pub trait AStar<A, S>
             }
         }
 
-        // The user might pass in a state with only the properties cared about
-        // when checking if the goal is reached. But the data structures work
-        // with complete snapshots of states with all variables accounted for.
-        // So, we have to use pull out the complete state that was found during
-        // the exploration (if any) and use that as the start node for making
-        // the returned path.
+        // The user might have passed in a goal state with only the properties
+        // cared about when checking if the goal is reached. But the data
+        // structures work with complete snapshots of states with all variables
+        // accounted for. So, we have to use pull out the complete state that
+        // was found during the exploration (if any) and use that as the start
+        // node for making the returned path.
         match final_state {
             Some(dest) => self.create_result(from, &dest, came_from),
             None       => vec![]

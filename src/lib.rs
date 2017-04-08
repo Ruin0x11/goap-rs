@@ -106,7 +106,7 @@ impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct GoapState<K, V> {
-    props: PropMap<K, V>,
+    pub props: PropMap<K, V>,
 }
 
 #[derive(Debug)]
@@ -129,7 +129,7 @@ impl<K: Ord + PartialOrd, V> GoapEffects<K, V> {
         self.preconditions.insert(key, val);
     }
 
-    pub fn set_effect(&mut self, key: K, val: V) {
+    pub fn set_postcondition(&mut self, key: K, val: V) {
         self.postconditions.insert(key, val);
     }
 }
@@ -142,8 +142,8 @@ impl<K, V> Effect for GoapEffects<K, V> {
 }
 
 pub struct GoapPlanner<K, V, A> {
-    goal: Option<GoapState<K, V>>,
-    actions: HashMap<A, GoapEffects<K, V>>,
+    pub goal: Option<GoapState<K, V>>,
+    pub actions: HashMap<A, GoapEffects<K, V>>,
 }
 
 impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
