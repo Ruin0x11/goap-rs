@@ -61,8 +61,8 @@ pub trait AStar<A, S>
 
     /// Finds an optimal sequence of transitions, if any, from the start state
     /// to the destination state.
-    fn find(&self, from: S, to: &S) -> Vec<A> {
-        if from == *to {
+    fn find(&self, from: &S, to: &S) -> Vec<A> {
+        if from == to {
             return vec![];
         }
 
@@ -118,16 +118,16 @@ pub trait AStar<A, S>
         }
     }
 
-    fn create_result(&self, start: S, goal: &S, came_from: HashMap<S, Option<(A, S)>>) -> Vec<A> {
+    fn create_result(&self, start: &S, goal: &S, came_from: HashMap<S, Option<(A, S)>>) -> Vec<A> {
         let mut current = goal.clone();
         let mut path_buffer = vec![];
         let mut state_history = vec![];
-        while current != start {
+        while current != *start {
             match came_from.get(&current) {
                 Some(&Some((ref action, ref new_current))) => {
                     current = new_current.clone();
                     path_buffer.push(action.clone());
-                    if current != start {
+                    if current != *start {
                         state_history.push(new_current.clone());
                     }
                 }
@@ -140,7 +140,7 @@ pub trait AStar<A, S>
             }
         }
 
-        assert_eq!(None, state_history.iter().find(|p| **p == start),
+        assert_eq!(None, state_history.iter().find(|p| *p == start),
                    "The path that was found looped back on itself! {:?}", state_history);
 
         path_buffer.reverse();
