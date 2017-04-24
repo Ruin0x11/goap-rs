@@ -28,10 +28,9 @@
 
 mod astar;
 
-#[cfg(test)]
 extern crate serde;
-#[cfg(test)]
 #[macro_use] extern crate serde_derive;
+
 #[cfg(test)]
 #[macro_use] extern crate enum_derive;
 #[cfg(test)]
@@ -104,8 +103,8 @@ impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
     }
 }
 
-#[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct GoapState<K, V> {
+#[derive(Serialize, Deserialize, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub struct GoapState<K: Ord, V> {
     pub props: PropMap<K, V>,
 }
 
@@ -141,7 +140,7 @@ impl<K, V> Effect for GoapEffects<K, V> {
     }
 }
 
-pub struct GoapPlanner<K, V, A> {
+pub struct GoapPlanner<K: Ord, V, A> {
     pub goal: Option<GoapState<K, V>>,
     pub actions: HashMap<A, GoapEffects<K, V>>,
 }
@@ -271,7 +270,7 @@ mod tests {
                     for (post_name, post_value) in post_table.iter() {
                         let key = post_name.parse::<MyKey>().unwrap();
                         let value = post_value.clone().try_into::<bool>().unwrap();
-                        effects.set_effect(key, value);
+                        effects.set_postcondition(key, value);
                     }
                 }
 
@@ -338,7 +337,7 @@ mod tests {
             for _ in 0..rng.gen_range(1, 20) {
                 let key = rng.choose(&keys).unwrap();
                 let val = rng.gen();
-                effects.set_effect(key.clone(), val);
+                effects.set_postcondition(key.clone(), val);
             }
             actions.insert(action_name, effects);
         }
