@@ -47,7 +47,7 @@ use std::hash::Hash;
 
 use astar::AStar;
 
-type PropMap<K, V> = BTreeMap<K, V>;
+pub type GoapFacts<K, V> = BTreeMap<K, V>;
 
 pub trait Effect {
     fn cost(&self) -> u32;
@@ -57,8 +57,7 @@ pub trait Effect {
 /// generate an optimal plan for transitioning between start and goal states.
 pub trait Planner<K, V, A, S, E>
     where E: Effect {
-    fn get_plan(&self, state: S) -> Vec<A>;
-    fn set_goal(&mut self, goal: S);
+    fn get_plan(&self, state: &S, goal: &S) -> Vec<A>;
 
     fn get_actions(&self) -> Vec<&A>;
     fn actions(&self, action: &A) -> &E;
@@ -105,21 +104,21 @@ impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
 
 #[derive(Serialize, Deserialize, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct GoapState<K: Ord, V> {
-    pub props: PropMap<K, V>,
+    pub facts: GoapFacts<K, V>,
 }
 
 #[derive(Debug)]
 pub struct GoapEffects<K, V> {
-    preconditions: PropMap<K, V>,
-    postconditions: PropMap<K, V>,
+    preconditions: GoapFacts<K, V>,
+    postconditions: GoapFacts<K, V>,
     cost: u32,
 }
 
 impl<K: Ord + PartialOrd, V> GoapEffects<K, V> {
     pub fn new(cost: u32) -> Self {
         GoapEffects {
-            preconditions: PropMap::new(),
-            postconditions: PropMap::new(),
+            preconditions: GoapFacts::new(),
+            postconditions: GoapFacts::new(),
             cost: cost,
         }
     }
@@ -140,8 +139,7 @@ impl<K, V> Effect for GoapEffects<K, V> {
     }
 }
 
-pub struct GoapPlanner<K: Ord, V, A> {
-    pub goal: Option<GoapState<K, V>>,
+pub struct GoapPlanner<K, V, A> {
     pub actions: HashMap<A, GoapEffects<K, V>>,
 }
 
@@ -150,16 +148,8 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     where K: Ord + PartialOrd + Hash + Eq + PartialEq + Clone + Debug,
           V: Hash + Eq + PartialEq + Clone + Debug,
           A: Hash + Eq + PartialEq + Clone + Debug {
-    fn get_plan(&self, state: GoapState<K, V>) -> Vec<A> {
-        if let Some(ref goal) = self.goal {
-            self.find(state, &goal)
-        } else {
-            vec![]
-        }
-    }
-
-    fn set_goal(&mut self, goal: GoapState<K, V>) {
-        self.goal = Some(goal);
+    fn get_plan(&self, state: &GoapState<K, V>, goal: &GoapState<K, V>) -> Vec<A> {
+        self.find(state, goal)
     }
 
     fn get_actions(&self) -> Vec<&A> {
@@ -171,10 +161,10 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     }
 
     fn closeness_to(&self, current: &GoapState<K, V>, goal: &GoapState<K, V>) -> u32 {
-        assert!(goal.props.len() <= current.props.len(), "The goal state specifies more conditions than were given in the starting state!");
+        assert!(goal.facts.len() <= current.facts.len(), "The goal state specifies more conditions than were given in the starting state!");
         let mut differences = 0;
-        for key in goal.props.keys() {
-            if goal.props.get(key).unwrap() != current.props.get(key).unwrap() {
+        for key in goal.facts.keys() {
+            if goal.facts.get(key).unwrap() != current.facts.get(key).unwrap() {
                 differences += 1;
             }
         }
@@ -186,10 +176,10 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
         let mut new_state = current.clone();
         for key in effects.postconditions.keys() {
             let effect_val = effects.postconditions.get(key).unwrap().clone();
-            if !new_state.props.contains_key(key) {
-                new_state.props.insert(key.clone(), effect_val);
+            if !new_state.facts.contains_key(key) {
+                new_state.facts.insert(key.clone(), effect_val);
             } else {
-                let val_mut = new_state.props.get_mut(key).unwrap();
+                let val_mut = new_state.facts.get_mut(key).unwrap();
                 *val_mut = effect_val;
             }
         }
@@ -199,12 +189,12 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     fn is_neighbor(&self, current: &GoapState<K, V>, action: &A) -> bool {
         let effects = self.actions.get(action).unwrap();
         effects.preconditions.iter().all(|(cond, val)| {
-            current.props.get(cond).map_or(false, |r| r == val)
+            current.facts.get(cond).map_or(false, |r| r == val)
         })
     }
 
     fn plan_found(&self, current: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
-        to.props.iter().all(|(cond, val)| current.props.get(cond).map_or(false, |r| r == val))
+        to.facts.iter().all(|(cond, val)| current.facts.get(cond).map_or(false, |r| r == val))
     }
 
 }
@@ -279,7 +269,6 @@ mod tests {
         }
 
         GoapPlanner {
-            goal: None,
             actions: actions,
         }
     }
@@ -290,7 +279,7 @@ mod tests {
 
         // Firewood on the ground can only be produced by cutting down a tree.
         goal_c.insert(FirewoodOnGround, true);
-        let goal = GoapState { props: goal_c };
+        let goal = GoapState { facts: goal_c };
 
         // All properties of the starting world must be specified, for now.
         let mut start_c =  BTreeMap::new();
@@ -301,12 +290,11 @@ mod tests {
         start_c.insert(InShop, false);
         start_c.insert(InForest, true);
 
-        let start = GoapState { props: start_c };
+        let start = GoapState { facts: start_c };
 
-        let mut planner = planner_from_toml();
-        planner.set_goal(goal);
+        let planner = planner_from_toml();
 
-        let plan = planner.get_plan(start);
+        let plan = planner.get_plan(&start, &goal);
         assert_eq!(plan, [GatherBranches, GoToShop, SellFirewood, BuyAxe, GoToForest, ChopTree]);
     }
 
@@ -342,7 +330,6 @@ mod tests {
             actions.insert(action_name, effects);
         }
         GoapPlanner {
-            goal: None,
             actions: actions,
         }
     }
@@ -352,7 +339,7 @@ mod tests {
         for key in planner.actions.keys() {
             state_conds.insert(key.clone(), rng.gen());
         }
-        GoapState { props: state_conds }
+        GoapState { facts: state_conds }
     }
 
     #[cfg(never)]
