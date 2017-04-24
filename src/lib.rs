@@ -107,7 +107,7 @@ pub struct GoapState<K: Ord, V> {
     pub facts: GoapFacts<K, V>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct GoapEffects<K, V> {
     preconditions: GoapFacts<K, V>,
     postconditions: GoapFacts<K, V>,
@@ -139,7 +139,8 @@ impl<K, V> Effect for GoapEffects<K, V> {
     }
 }
 
-pub struct GoapPlanner<K, V, A> {
+#[derive(Clone, Debug)]
+pub struct GoapPlanner<K, V, A: Eq + Hash> {
     pub actions: HashMap<A, GoapEffects<K, V>>,
 }
 
