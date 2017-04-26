@@ -3,12 +3,11 @@ mod tests {
     use ::*;
     use std::collections::BTreeMap;
     use std::fmt::{self, Display};
-    use test::Bencher;
     use rand::{self, ThreadRng, Rng};
 
-    type PropMap = BTreeMap<String, bool>;
+    type GoapFacts = BTreeMap<String, bool>;
 
-    fn get_state_differences(current: &PropMap, goal: &PropMap) -> u32 {
+    fn get_state_differences(current: &GoapFacts, goal: &GoapFacts) -> u32 {
         assert!(goal.len() <= current.len(), "The goal state specifies more conditions than were given in the starting state!");
         let mut differences = 0;
         for key in goal.keys() {
@@ -22,7 +21,7 @@ mod tests {
     fn transition(current: &MyState, next: &Effects) -> MyState {
         let mut new_state = current.clone();
         for key in next.effects.keys() {
-            let val_mut = new_state.props.get_mut(key).unwrap();
+            let val_mut = new_state.facts.get_mut(key).unwrap();
             *val_mut = *next.effects.get(key).unwrap();
         }
         new_state
@@ -30,16 +29,16 @@ mod tests {
 
     #[derive(Debug)]
     struct Effects {
-        preconditions: PropMap,
-        effects: PropMap,
+        preconditions: GoapFacts,
+        effects: GoapFacts,
         cost: u32,
     }
 
     impl Effects {
         pub fn new(cost: u32) -> Self {
             Effects {
-                preconditions: PropMap::new(),
-                effects: PropMap::new(),
+                preconditions: GoapFacts::new(),
+                effects: GoapFacts::new(),
                 cost: cost,
             }
         }
@@ -55,12 +54,12 @@ mod tests {
 
     #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
     struct MyState {
-        props: PropMap,
+        facts: GoapFacts,
     }
 
     impl Display for MyState {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            for (k, v) in self.props.iter() {
+            for (k, v) in self.facts.iter() {
                 write!(f, "{:?} -> {}\n", k, v)?;
             }
             Ok(())
@@ -73,7 +72,7 @@ mod tests {
 
     impl AStar<String, MyState> for MyFinder {
         fn heuristic(&self, next: &MyState, destination: &MyState) -> f32 {
-            get_state_differences(&next.props, &destination.props) as f32
+            get_state_differences(&next.facts, &destination.facts) as f32
         }
 
         fn movement_cost(&self, _current: &MyState, action: &String) -> f32 {
@@ -84,11 +83,11 @@ mod tests {
         fn neighbors(&self, current: &MyState) -> Vec<(String, MyState)> {
             let satisfies_conditions = |effect: &Effects| {
                 effect.preconditions.iter().all(|(cond, val)| {
-                    current.props.get(cond).unwrap() == val
+                    current.facts.get(cond).unwrap() == val
                 })
             };
             let actions = self.actions.iter()
-                .filter(|&(_, action_effects)| satisfies_conditions(action_effects))
+                .filter(|&(_, actions)| satisfies_conditions(actions))
                 .map(|(action, _)| action)
                 .cloned().collect::<Vec<String>>();
 
@@ -101,7 +100,7 @@ mod tests {
 
         fn goal_reached(&self, current: &MyState, to: &MyState) -> bool {
             // TEMP: Deduplicate.
-            to.props.iter().all(|(cond, val)| current.props.get(cond).unwrap() == val)
+            to.facts.iter().all(|(cond, val)| current.facts.get(cond).unwrap() == val)
         }
 
         fn goal_is_reachable(&self, _to: &MyState) -> bool {
@@ -180,7 +179,7 @@ mod tests {
         for key in planner.keys.iter() {
             state_conds.insert(key.clone(), rng.gen());
         }
-        MyState { props: state_conds }
+        MyState { facts: state_conds }
     }
 
     #[bench]
