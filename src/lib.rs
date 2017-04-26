@@ -64,7 +64,7 @@ pub trait Planner<K, V, A, S, E>
     fn is_neighbor(&self, current: &S, action: &A) -> bool;
     fn closeness_to(&self, current: &S, to: &S) -> u32;
     fn transition(&self, current: &S, next: &A) -> S;
-    fn plan_found(&self, current: &S, goal: &S) -> bool;
+    fn goal_reached(&self, current: &S, goal: &S) -> bool;
 }
 
 impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
@@ -93,8 +93,8 @@ impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
         valid_actions.into_iter().zip(states.into_iter()).collect()
     }
 
-    fn goal_reached(&self, from: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
-        self.plan_found(from, to)
+    fn finished(&self, from: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
+        self.goal_reached(from, to)
     }
 
     fn goal_is_reachable(&self, _to: &GoapState<K, V>) -> bool {
@@ -194,7 +194,7 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
         })
     }
 
-    fn plan_found(&self, current: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
+    fn goal_reached(&self, current: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
         to.facts.iter().all(|(cond, val)| current.facts.get(cond).map_or(false, |r| r == val))
     }
 

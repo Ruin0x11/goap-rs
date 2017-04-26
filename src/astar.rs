@@ -56,7 +56,7 @@ pub trait AStar<A, S>
     /// The set of neighboring states and the transitions to each.
     fn neighbors(&self, current_state: &S) -> Vec<(A, S)>;
 
-    fn goal_reached(&self, current_state: &S, goal: &S) -> bool;
+    fn finished(&self, current_state: &S, goal: &S) -> bool;
     fn goal_is_reachable(&self, goal: &S) -> bool;
 
     /// Finds an optimal sequence of transitions, if any, from the start state
@@ -82,7 +82,7 @@ pub trait AStar<A, S>
         let mut final_state = None;
 
         while let Some(current) = frontier.pop() {
-            if self.goal_reached(&current.position, &to) {
+            if self.finished(&current.position, &to) {
                 final_state = Some(current.position);
                 break;
             }
