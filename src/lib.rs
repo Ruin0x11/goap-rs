@@ -260,6 +260,8 @@ mod tests {
         actions: HashMap<MyAction, Effects>,
     }
 
+    // TODO: "satisfies_conditions", "transition", etc. should be part of a
+    // trait for Effects and States.
     impl AStar<MyAction, MyState> for MyFinder {
         fn heuristic(&self, next: &MyState, destination: &MyState) -> f32 {
             get_state_differences(&next.props, &destination.props) as f32
@@ -317,7 +319,7 @@ mod tests {
     impl Display for MyState {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             for (k, v) in self.props.iter() {
-                write!(f, "{:?} -> {}\n", k, v)?;
+                write!(f, "{:?}\t-> {}\n", k, v)?;
             }
             Ok(())
         }
@@ -456,11 +458,11 @@ mod tests {
             start_c.insert(InForest, false);
             let start = MyState { props: start_c };
 
-            // println!("===Start===\n{}===Goal====\n{}", start, goal);
+            println!("===Start===\n{}===Goal====\n{}", start, goal);
 
             planner.set_goal(goal);
             let plan = planner.get_plan(start);
-            // println!("Plan: {:?}", plan);
+            println!("Plan: {:?}\n", plan);
         });
     }
 }
