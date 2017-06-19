@@ -205,7 +205,7 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     fn is_neighbor(&self, current: &GoapState<K, V>, action: &A) -> bool {
         let effects = self.actions.get(action).unwrap();
         effects.preconditions.iter().all(|(cond, val)| {
-            current.facts.get(cond).map_or(false, |r| r == val)
+            current.facts.get(cond).map_or(true, |r| r == val)
         })
     }
 
