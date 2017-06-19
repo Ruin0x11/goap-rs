@@ -63,10 +63,16 @@ pub trait AStar<A, S>
     /// to the destination state.
     fn find(&self, from: &S, to: &S) -> Vec<A> {
         if from == to {
+            if cfg!(feature = "debug") {
+                println!("GOAP: from == to");
+            }
             return vec![];
         }
 
         if !self.goal_is_reachable(&to) {
+            if cfg!(feature = "debug") {
+                println!("GOAP: Goal wasn't reachable.")
+            }
             return vec![];
         }
 
@@ -93,6 +99,12 @@ pub trait AStar<A, S>
                 calculation_steps += 1;
             }
             let neigh = self.neighbors(&current.position);
+            if cfg!(feature = "debug") {
+                println!("GOAP: current: {:?}", current.position);
+            }
+            if cfg!(feature = "debug") {
+                println!("GOAP: neighbors: {:?}", neigh);
+            }
 
             for (action, next_state) in neigh.into_iter() {
                 let new_cost = cost_so_far[&current.position] + self.movement_cost(&current.position, &action);
@@ -102,6 +114,9 @@ pub trait AStar<A, S>
                     let priority = new_cost + self.heuristic(&next_state, &to);
                     frontier.push(AStarState { position: next_state.clone(), cost: priority });
                     came_from.insert(next_state.clone(), Some((action, current.position.clone())));
+                    if cfg!(feature = "debug") {
+                        println!("GOAP: next state: {:?}", next_state);
+                    }
                 }
             }
         }
@@ -114,7 +129,12 @@ pub trait AStar<A, S>
         // node for making the returned path.
         match final_state {
             Some(dest) => self.create_result(from, &dest, came_from),
-            None       => vec![]
+            None       => {
+                if cfg!(feature = "debug") {
+                    println!("GOAP: final state was none")
+                }
+                vec![]
+            }
         }
     }
 
@@ -130,10 +150,16 @@ pub trait AStar<A, S>
                     if current != *start {
                         state_history.push(new_current.clone());
                     }
+                    if cfg!(feature = "debug") {
+                        println!("GOAP: current: {:?}", current);
+                    }
                 }
                 Some(&None) => panic!(
                     "Reached a dead-end before reaching the start node when tracing backwards from the goal to the start."),
                 None => {
+                    if cfg!(feature = "debug") {
+                        println!("GOAP: None was found in create_result");
+                    }
                     path_buffer = vec![];
                     break
                 },

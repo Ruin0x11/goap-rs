@@ -12,3 +12,6 @@ rand = "0.3.15"
 toml = "0.4.1"
 enum_derive = "0.1.7"
 macro-attr = "0.2.0"
+
+[features]
+debug = []
