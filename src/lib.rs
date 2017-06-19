@@ -210,7 +210,8 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     }
 
     fn goal_reached(&self, current: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
-        to.facts.iter().all(|(cond, val)| current.facts.get(cond).map_or(false, |r| r == val))
+        // Treat the condition not existing in the current state as a "don't care"
+        to.facts.iter().all(|(cond, val)| current.facts.get(cond).map_or(true, |r| r == val))
     }
 }
 
