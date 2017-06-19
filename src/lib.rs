@@ -124,9 +124,9 @@ impl<K: Ord, V> GoapState<K, V> {
 
 #[derive(Clone, Debug)]
 pub struct GoapEffects<K, V> {
-    preconditions: GoapFacts<K, V>,
-    postconditions: GoapFacts<K, V>,
-    cost: u32,
+    pub preconditions: GoapFacts<K, V>,
+    pub postconditions: GoapFacts<K, V>,
+    pub cost: u32,
 }
 
 impl<K: Ord + PartialOrd, V> GoapEffects<K, V> {
