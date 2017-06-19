@@ -122,14 +122,17 @@ pub trait AStar<A, S>
             for (action, next_state) in neigh.into_iter() {
                 let new_cost = cost_so_far[&current.position] + self.movement_cost(&current.position, &action);
                 let val = cost_so_far.entry(next_state.clone()).or_insert(f32::MAX);
+                if cfg!(feature = "debug") {
+                    println!("GOAP: action: {:?} cost: {:?} so_far: {:?}", action, new_cost, val);
+                }
                 if new_cost < *val {
+                    if cfg!(feature = "debug") {
+                        println!("GOAP: chosen action: {:?}", action);
+                    }
                     *val = new_cost;
                     let priority = new_cost + self.heuristic(&next_state, &to);
                     frontier.push(AStarState { position: next_state.clone(), cost: priority });
                     came_from.insert(next_state.clone(), Some((action, current.position.clone())));
-                    if cfg!(feature = "debug") {
-                        println!("GOAP: next state: {:?}", next_state);
-                    }
                 }
             }
         }
