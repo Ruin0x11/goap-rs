@@ -341,45 +341,44 @@ mod tests {
             }
             actions.insert(action_name, effects);
         }
-        let planner = GoapPlanner {
+        GoapPlanner {
             actions: actions,
-        };
-        (keys, planner)
+        }
     }
 
-    fn gen_state(keys: &Vec<String>,
-                 rng: &mut ThreadRng,
-                 planner: &GoapPlanner<String, bool, String>) -> GoapState<String, bool> {
+    fn gen_state(rng: &mut ThreadRng, planner: &GoapPlanner<String, bool, String>) -> GoapState<String, bool> {
         let mut state_conds = BTreeMap::new();
-        for key in keys {
+        for key in planner.actions.keys() {
             state_conds.insert(key.clone(), rng.gen());
         }
         GoapState { facts: state_conds }
     }
 
-    use test::Bencher;
-
+    #[cfg(never)]
     #[test]
     fn test_generated() {
-        let (keys, planner) = get_random_planner();
+        let mut planner = get_random_planner();
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
-            let goal = gen_state(&keys, &mut rng, &planner);
-            let start = gen_state(&keys, &mut rng, &planner);
-            let plan = planner.get_plan(&start, &goal);
+            let goal = gen_state(&mut rng, &planner);
+            let start = gen_state(&mut rng, &planner);
+            planner.set_goal(goal);
+            let plan = planner.get_plan(start);
             println!("Plan: {:?}", plan);
         }
     }
 
+    #[cfg(never)]
     #[bench]
     fn benchmark_generated(b: &mut Bencher) {
-        let (keys, planner) = get_random_planner();
+        let mut planner = MyPlanner::new();
         let mut rng = rand::thread_rng();
         b.iter(|| {
-            let goal = gen_state(&keys, &mut rng, &planner);
-            let start = gen_state(&keys, &mut rng, &planner);
-            let plan = planner.get_plan(&start, &goal);
-            println!("Plan: {:?}\n", plan);
+            let goal = gen_state(&mut rng, &planner);
+            let start = gen_state(&mut rng, &planner);
+            planner.set_goal(goal);
+            let plan = planner.get_plan(start);
+            // println!("Plan: {:?}", plan);
         });
     }
 }
