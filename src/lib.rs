@@ -25,6 +25,9 @@
 // matches the goal is found, it is used as the "destination" when backtracking
 // along the parents of each node in the path, instead of whatever was passed in
 // as the set of goal conditions.
+#![feature(test)]
+
+extern crate test;
 
 mod astar;
 
@@ -32,20 +35,20 @@ extern crate serde;
 #[macro_use] extern crate serde_derive;
 
 #[cfg(test)]
-#[macro_use] extern crate enum_derive;
+// #[macro_use] extern crate enum_derive;
 #[cfg(test)]
-#[macro_use] extern crate macro_attr;
+// #[macro_use] extern crate macro_attr;
 #[cfg(test)]
-extern crate rand;
+// extern crate rand;
 #[cfg(test)]
-extern crate toml;
+// extern crate toml;
 
 use std::f32;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use astar::AStar;
+pub use astar::AStar;
 
 pub type GoapFacts<K, V> = BTreeMap<K, V>;
 
@@ -105,6 +108,14 @@ impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
 #[derive(Serialize, Deserialize, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct GoapState<K: Ord, V> {
     pub facts: GoapFacts<K, V>,
+}
+
+impl<K: Ord, V> GoapState<K, V> {
+    pub fn new() -> Self {
+        GoapState {
+            facts: GoapFacts::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -197,9 +208,9 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     fn goal_reached(&self, current: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
         to.facts.iter().all(|(cond, val)| current.facts.get(cond).map_or(false, |r| r == val))
     }
-
 }
 
+#[cfg(never)]
 #[cfg(test)]
 mod tests {
     mod toml_util;
@@ -299,7 +310,7 @@ mod tests {
         assert_eq!(plan, [GatherBranches, GoToShop, SellFirewood, BuyAxe, GoToForest, ChopTree]);
     }
 
-    fn get_random_planner() -> GoapPlanner<String, bool, String> {
+    fn get_random_planner() -> (Vec<String>, GoapPlanner <String, bool, String>) {
         let mut actions = HashMap::new();
         let mut rng = rand::thread_rng();
         let rand_str = || rand::thread_rng().gen_ascii_chars().take(20).collect::<String>();
@@ -330,44 +341,45 @@ mod tests {
             }
             actions.insert(action_name, effects);
         }
-        GoapPlanner {
+        let planner = GoapPlanner {
             actions: actions,
-        }
+        };
+        (keys, planner)
     }
 
-    fn gen_state(rng: &mut ThreadRng, planner: &GoapPlanner<String, bool, String>) -> GoapState<String, bool> {
+    fn gen_state(keys: &Vec<String>,
+                 rng: &mut ThreadRng,
+                 planner: &GoapPlanner<String, bool, String>) -> GoapState<String, bool> {
         let mut state_conds = BTreeMap::new();
-        for key in planner.actions.keys() {
+        for key in keys {
             state_conds.insert(key.clone(), rng.gen());
         }
         GoapState { facts: state_conds }
     }
 
-    #[cfg(never)]
+    use test::Bencher;
+
     #[test]
     fn test_generated() {
-        let mut planner = get_random_planner();
+        let (keys, planner) = get_random_planner();
         let mut rng = rand::thread_rng();
         for _ in 0..100 {
-            let goal = gen_state(&mut rng, &planner);
-            let start = gen_state(&mut rng, &planner);
-            planner.set_goal(goal);
-            let plan = planner.get_plan(start);
+            let goal = gen_state(&keys, &mut rng, &planner);
+            let start = gen_state(&keys, &mut rng, &planner);
+            let plan = planner.get_plan(&start, &goal);
             println!("Plan: {:?}", plan);
         }
     }
 
-    #[cfg(never)]
     #[bench]
     fn benchmark_generated(b: &mut Bencher) {
-        let mut planner = MyPlanner::new();
+        let (keys, planner) = get_random_planner();
         let mut rng = rand::thread_rng();
         b.iter(|| {
-            let goal = gen_state(&mut rng, &planner);
-            let start = gen_state(&mut rng, &planner);
-            planner.set_goal(goal);
-            let plan = planner.get_plan(start);
-            // println!("Plan: {:?}", plan);
+            let goal = gen_state(&keys, &mut rng, &planner);
+            let start = gen_state(&keys, &mut rng, &planner);
+            let plan = planner.get_plan(&start, &goal);
+            println!("Plan: {:?}\n", plan);
         });
     }
 }
