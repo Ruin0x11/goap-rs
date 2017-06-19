@@ -60,7 +60,7 @@ pub trait Effect {
 /// generate an optimal plan for transitioning between start and goal states.
 pub trait Planner<K, V, A, S, E>
     where E: Effect {
-    fn get_plan(&self, state: &S, goal: &S) -> Vec<A>;
+    fn get_plan(&self, state: &S, goal: &S) -> Result<Vec<A>, S>;
 
     fn get_actions(&self) -> Vec<&A>;
     fn actions(&self, action: &A) -> &E;
@@ -164,7 +164,7 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     where K: Ord + PartialOrd + Hash + Eq + PartialEq + Clone + Debug,
           V: Hash + Eq + PartialEq + Clone + Debug,
           A: Hash + Eq + PartialEq + Clone + Debug {
-    fn get_plan(&self, state: &GoapState<K, V>, goal: &GoapState<K, V>) -> Vec<A> {
+    fn get_plan(&self, state: &GoapState<K, V>, goal: &GoapState<K, V>) -> Result<Vec<A>, GoapState<K, V>> {
         self.find(state, goal)
     }
 

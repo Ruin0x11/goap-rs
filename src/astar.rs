@@ -60,20 +60,21 @@ pub trait AStar<A, S>
     fn goal_is_reachable(&self, goal: &S) -> bool;
 
     /// Finds an optimal sequence of transitions, if any, from the start state
-    /// to the destination state.
-    fn find(&self, from: &S, to: &S) -> Vec<A> {
+    /// to the destination state. If there is no possible sequence, return the state on which the
+    /// search failed.
+    fn find(&self, from: &S, to: &S) -> Result<Vec<A>, S> {
         if from == to {
             if cfg!(feature = "debug") {
                 println!("GOAP: from == to");
             }
-            return vec![];
+            return Ok(vec![]);
         }
 
         if !self.goal_is_reachable(&to) {
             if cfg!(feature = "debug") {
                 println!("GOAP: Goal wasn't reachable.")
             }
-            return vec![];
+            return Ok(vec![]);
         }
 
         let mut frontier = BinaryHeap::new();
@@ -119,6 +120,10 @@ pub trait AStar<A, S>
                 println!("GOAP: neighbors: {:?}", neigh);
             }
 
+            if neigh.is_empty() {
+                return Err(current.position)
+            }
+
             for (action, next_state) in neigh.into_iter() {
                 let new_cost = cost_so_far[&current.position] + self.movement_cost(&current.position, &action);
                 let val = cost_so_far.entry(next_state.clone()).or_insert(f32::MAX);
@@ -157,7 +162,7 @@ pub trait AStar<A, S>
             println!("GOAP: finished astar, result: {:?}\n", r);
         }
 
-        r
+        Ok(r)
     }
 
     fn create_result(&self, start: &S, goal: &S, came_from: HashMap<S, Option<(A, S)>>) -> Vec<A> {
