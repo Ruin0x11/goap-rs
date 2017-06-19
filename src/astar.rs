@@ -87,13 +87,26 @@ pub trait AStar<A, S>
         let mut calculation_steps = 0;
         let mut final_state = None;
 
+        if cfg!(feature = "debug") {
+            println!("GOAP: starting everything")
+        }
+
         while let Some(current) = frontier.pop() {
+            if cfg!(feature = "debug") {
+                println!("GOAP: next round, cur: {:?}", current.position)
+            }
             if self.finished(&current.position, &to) {
+                if cfg!(feature = "debug") {
+                    println!("GOAP: got final state")
+                }
                 final_state = Some(current.position);
                 break;
             }
             // Waiting for associated_consts to be stabilized...
             if calculation_steps >= CALCULATION_LIMIT {
+                if cfg!(feature = "debug") {
+                    println!("GOAP: exceeded calculation limit")
+                }
                 break
             } else {
                 calculation_steps += 1;
@@ -127,7 +140,7 @@ pub trait AStar<A, S>
         // accounted for. So, we have to use pull out the complete state that
         // was found during the exploration (if any) and use that as the start
         // node for making the returned path.
-        match final_state {
+        let r = match final_state {
             Some(dest) => self.create_result(from, &dest, came_from),
             None       => {
                 if cfg!(feature = "debug") {
@@ -135,7 +148,13 @@ pub trait AStar<A, S>
                 }
                 vec![]
             }
+        };
+
+        if cfg!(feature = "debug") {
+            println!("GOAP: finished astar, result: {:?}\n", r);
         }
+
+        r
     }
 
     fn create_result(&self, start: &S, goal: &S, came_from: HashMap<S, Option<(A, S)>>) -> Vec<A> {
