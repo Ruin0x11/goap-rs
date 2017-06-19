@@ -35,20 +35,20 @@ extern crate serde;
 #[macro_use] extern crate serde_derive;
 
 #[cfg(test)]
-#[macro_use] extern crate enum_derive;
+// #[macro_use] extern crate enum_derive;
 #[cfg(test)]
-#[macro_use] extern crate macro_attr;
+// #[macro_use] extern crate macro_attr;
 #[cfg(test)]
-extern crate rand;
+// extern crate rand;
 #[cfg(test)]
-extern crate toml;
+// extern crate toml;
 
 use std::f32;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use astar::AStar;
+pub use astar::AStar;
 
 pub type GoapFacts<K, V> = BTreeMap<K, V>;
 
@@ -108,6 +108,14 @@ impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
 #[derive(Serialize, Deserialize, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct GoapState<K: Ord, V> {
     pub facts: GoapFacts<K, V>,
+}
+
+impl<K: Ord, V> GoapState<K, V> {
+    pub fn new() -> Self {
+        GoapState {
+            facts: GoapFacts::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -202,6 +210,7 @@ impl<K, V, A> Planner<K, V, A, GoapState<K, V>, GoapEffects<K, V>> for
     }
 }
 
+#[cfg(never)]
 #[cfg(test)]
 mod tests {
     mod toml_util;
