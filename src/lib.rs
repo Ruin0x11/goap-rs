@@ -97,6 +97,10 @@ impl<K, V, A> astar::AStar<A, GoapState<K, V>> for GoapPlanner<K, V, A>
     }
 
     fn finished(&self, from: &GoapState<K, V>, to: &GoapState<K, V>) -> bool {
+        if cfg!(feature = "debug") {
+            println!("GOAP: goal reached? {:?} {:?} {:?}", from, to, self.goal_reached(from, to));
+        }
+
         self.goal_reached(from, to)
     }
 
